@@ -61,20 +61,47 @@ class Getchar:
         return self.impl()
 
 
+class cd:
+    """Context manager for changing the current working directory"""
+    def __init__(self, newPath):
+        self.newPath = os.path.expanduser(newPath)
+
+    def __enter__(self):
+        self.savedPath = os.getcwd()
+        os.chdir(self.newPath)
+
+    def __exit__(self, etype, value, traceback):
+        os.chdir(self.savedPath)
+
+
 getchar = Getchar()
 
 
-def check_git_edit(vi_command):
-    enc_str = locale.getpreferredencoding()
-    proc = run(shlex.split("git status"), capture_output=True)
-    git_branch_list = proc.stdout.decode(enc_str).splitlines()[0].split()[2:]
-    git_branch = ' '.join(git_branch_list).strip()
+def find_git_branch(directory):
+    """cd into a directory and return the git branch that it's on"""
+    with cd(directory):
+        enc_str = locale.getpreferredencoding()
+        proc = run(shlex.split("git status"), capture_output=True)
+        try:
+            git_branch_list = proc.stdout.decode(enc_str).splitlines()[0].split()[2:]
+            git_branch = ' '.join(git_branch_list).strip()
+        except IndexError:
+            git_branch = ""
+        return git_branch
+
+
+def check_git_edit(directory, vi_command):
+    """if a file is on a git master branch, ask before editing it"""
+    # check the git branch of the directory...
+    git_branch = find_git_branch(directory)
     if git_branch == "main" or git_branch == "master":
         print(f"{bcolors.RED_FLASH_REVERSE}You are editing on git {git_branch}, are you sure? (Y/N){bcolors.ENDC}")
         user_input = getchar()
         if user_input.upper() == "Y":
             # Run vim.basic which allows ~/.vimrc... vim.tiny does not!
             run(shlex.split(vi_command))
+    else:
+        run(shlex.split(vi_command))
 
 
 if __name__ == "__main__":
@@ -85,11 +112,10 @@ if __name__ == "__main__":
     else:
         raise OSError("vim is not installed")
     vi_command = f"{vim} {' '.join(sys.argv[1:])}"
-    dir_part = os.path.split(os.path.expanduser(' '.join(sys.argv[1:])))[0]
-    dirname = os.path.dirname(os.path.expanduser(' '.join(sys.argv[1:])))
-    if dir_part != "" and not os.path.exists(f"{dirname}/.git"):
-        run(shlex.split(vi_command))
-    elif dir_part == "" and os.path.exists("./.git"):
-        check_git_edit(vi_command)
+    filepath = os.path.expanduser(' '.join(sys.argv[1:]))
+    dir_part = os.path.split(filepath)[0]
+    if dir_part != "":
+        dirname = os.path.dirname(filepath)
+        check_git_edit(dirname, vi_command)
     else:
-        check_git_edit(vi_command)
+        check_git_edit(os.getcwd(), vi_command)
