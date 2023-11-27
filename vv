@@ -3,6 +3,7 @@ from subprocess import run
 import locale
 import shlex
 import sys
+import os
 
 
 class bcolors:
@@ -38,7 +39,7 @@ class _GetchUnix:
 
 class _GetchWindows:
     def __init__(self):
-        import msvcrt
+        pass
 
     def __call__(self):
         import msvcrt
@@ -60,14 +61,22 @@ class Getchar:
 getchar = Getchar()
 
 if __name__ == "__main__":
-    enc_str = locale.getpreferredencoding()
-    proc = run(shlex.split("git status"), capture_output=True)
-    git_branch_list = proc.stdout.decode(enc_str).splitlines()[0].split()[2:]
-    git_branch = ' '.join(git_branch_list).strip()
-    if git_branch == "main" or git_branch == "master":
-        print(f"{bcolors.RED_FLASH_REVERSE}You are editing on git {git_branch}, are you sure? (Y/N){bcolors.ENDC}")
-        user_input = getchar()
-        if user_input.upper() == "Y":
-            # Run vim.basic which allows ~/.vimrc... vim.tiny does not!
-            vi_command = f"vim.basic {' '.join(sys.argv[1:])}"
-            run(shlex.split(vi_command))
+    if not os.path.exists("vim.basic"):
+        vim = "vim"
+    else:
+        vim = "vim.basic"
+    dirname = os.path.dirname(' '.join(sys.argv[1:]))
+    vi_command = f"{vim} {' '.join(sys.argv[1:])}"
+    if not os.path.exists(f"{dirname}/.git"):
+        run(shlex.split(vi_command))
+    else:
+        enc_str = locale.getpreferredencoding()
+        proc = run(shlex.split("git status"), capture_output=True)
+        git_branch_list = proc.stdout.decode(enc_str).splitlines()[0].split()[2:]
+        git_branch = ' '.join(git_branch_list).strip()
+        if git_branch == "main" or git_branch == "master":
+            print(f"{bcolors.RED_FLASH_REVERSE}You are editing on git {git_branch}, are you sure? (Y/N){bcolors.ENDC}")
+            user_input = getchar()
+            if user_input.upper() == "Y":
+                # Run vim.basic which allows ~/.vimrc... vim.tiny does not!
+                run(shlex.split(vi_command))
