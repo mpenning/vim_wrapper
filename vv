@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from subprocess import run
 import locale
+import shutil
 import shlex
 import sys
 import os
@@ -50,6 +51,8 @@ class Getchar:
     """Gets a single character from standard input.  Does not echo to the screen."""
     def __init__(self):
         try:
+            import msvcrt
+            msvcrt.LK_LOCK
             self.impl = _GetchWindows()
         except ImportError:
             self.impl = _GetchUnix()
@@ -60,23 +63,33 @@ class Getchar:
 
 getchar = Getchar()
 
+
+def check_git_edit(vi_command):
+    enc_str = locale.getpreferredencoding()
+    proc = run(shlex.split("git status"), capture_output=True)
+    git_branch_list = proc.stdout.decode(enc_str).splitlines()[0].split()[2:]
+    git_branch = ' '.join(git_branch_list).strip()
+    if git_branch == "main" or git_branch == "master":
+        print(f"{bcolors.RED_FLASH_REVERSE}You are editing on git {git_branch}, are you sure? (Y/N){bcolors.ENDC}")
+        user_input = getchar()
+        if user_input.upper() == "Y":
+            # Run vim.basic which allows ~/.vimrc... vim.tiny does not!
+            run(shlex.split(vi_command))
+
+
 if __name__ == "__main__":
-    if not os.path.exists("vim.basic"):
+    if shutil.which("vim") and not shutil.which("vim.basic"):
         vim = "vim"
-    else:
+    elif shutil.which("vim.basic"):
         vim = "vim.basic"
-    dirname = os.path.dirname(' '.join(sys.argv[1:]))
-    vi_command = f"{vim} {' '.join(sys.argv[1:])}"
-    if not os.path.exists(f"{dirname}/.git"):
-        run(shlex.split(vi_command))
     else:
-        enc_str = locale.getpreferredencoding()
-        proc = run(shlex.split("git status"), capture_output=True)
-        git_branch_list = proc.stdout.decode(enc_str).splitlines()[0].split()[2:]
-        git_branch = ' '.join(git_branch_list).strip()
-        if git_branch == "main" or git_branch == "master":
-            print(f"{bcolors.RED_FLASH_REVERSE}You are editing on git {git_branch}, are you sure? (Y/N){bcolors.ENDC}")
-            user_input = getchar()
-            if user_input.upper() == "Y":
-                # Run vim.basic which allows ~/.vimrc... vim.tiny does not!
-                run(shlex.split(vi_command))
+        raise OSError("vim is not installed")
+    vi_command = f"{vim} {' '.join(sys.argv[1:])}"
+    dir_part = os.path.split(os.path.expanduser(' '.join(sys.argv[1:])))[0]
+    dirname = os.path.dirname(os.path.expanduser(' '.join(sys.argv[1:])))
+    if dir_part != "" and not os.path.exists(f"{dirname}/.git"):
+        run(shlex.split(vi_command))
+    elif dir_part == "" and os.path.exists("./.git"):
+        check_git_edit(vi_command)
+    else:
+        check_git_edit(vi_command)
