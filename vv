@@ -1,0 +1,73 @@
+#!/usr/bin/env python
+from subprocess import run
+import locale
+import shlex
+import sys
+
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    RED = '\033[91m'
+    RED_FLASH = '\033[5;37;91m'
+    RED_REVERSE = '\033[0;37;41m'
+    RED_FLASH_REVERSE = '\033[5;37;41m'
+    WARNING = '\033[93m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+
+class _GetchUnix:
+
+    def __call__(self):
+        import termios
+        import tty
+        import sys
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(sys.stdin.fileno())
+            ch = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        return ch
+
+
+class _GetchWindows:
+    def __init__(self):
+        import msvcrt
+
+    def __call__(self):
+        import msvcrt
+        return msvcrt.getch()
+
+
+class Getchar:
+    """Gets a single character from standard input.  Does not echo to the screen."""
+    def __init__(self):
+        try:
+            self.impl = _GetchWindows()
+        except ImportError:
+            self.impl = _GetchUnix()
+
+    def __call__(self):
+        return self.impl()
+
+
+getchar = Getchar()
+
+if __name__ == "__main__":
+    enc_str = locale.getpreferredencoding()
+    proc = run(shlex.split("git status"), capture_output=True)
+    git_branch_list = proc.stdout.decode(enc_str).splitlines()[0].split()[2:]
+    git_branch = ' '.join(git_branch_list).strip()
+    if git_branch == "main" or git_branch == "master":
+        print(f"{bcolors.RED_FLASH_REVERSE}You are editing on git {git_branch}, are you sure? (Y/N){bcolors.ENDC}")
+        user_input = getchar()
+        if user_input.upper() == "Y":
+            # Run vim.basic which allows ~/.vimrc... vim.tiny does not!
+            vi_command = f"vim.basic {' '.join(sys.argv[1:])}"
+            run(shlex.split(vi_command))
